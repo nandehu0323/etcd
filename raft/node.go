@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/yudai/pp"
+
 	pb "go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -341,6 +343,7 @@ func (n *node) run() {
 		case pm := <-propc:
 			m := pm.m
 			m.From = r.id
+			pp.Println(m)
 			err := r.Step(m)
 			if pm.result != nil {
 				pm.result <- err

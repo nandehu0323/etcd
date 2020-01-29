@@ -18,6 +18,8 @@ package v3rpc
 import (
 	"context"
 
+	"github.com/yudai/pp"
+
 	"go.etcd.io/etcd/etcdserver"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	pb "go.etcd.io/etcd/etcdserver/etcdserverpb"
@@ -48,7 +50,7 @@ func (s *kvServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResp
 	if err := checkRangeRequest(r); err != nil {
 		return nil, err
 	}
-
+	pp.Println(r)
 	resp, err := s.kv.Range(ctx, r)
 	if err != nil {
 		return nil, togRPCError(err)
@@ -62,7 +64,6 @@ func (s *kvServer) Put(ctx context.Context, r *pb.PutRequest) (*pb.PutResponse, 
 	if err := checkPutRequest(r); err != nil {
 		return nil, err
 	}
-
 	resp, err := s.kv.Put(ctx, r)
 	if err != nil {
 		return nil, togRPCError(err)
@@ -76,7 +77,6 @@ func (s *kvServer) DeleteRange(ctx context.Context, r *pb.DeleteRangeRequest) (*
 	if err := checkDeleteRequest(r); err != nil {
 		return nil, err
 	}
-
 	resp, err := s.kv.DeleteRange(ctx, r)
 	if err != nil {
 		return nil, togRPCError(err)
@@ -97,7 +97,6 @@ func (s *kvServer) Txn(ctx context.Context, r *pb.TxnRequest) (*pb.TxnResponse, 
 	if _, _, err := checkIntervals(r.Failure); err != nil {
 		return nil, err
 	}
-
 	resp, err := s.kv.Txn(ctx, r)
 	if err != nil {
 		return nil, togRPCError(err)

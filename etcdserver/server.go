@@ -241,6 +241,9 @@ type EtcdServer struct {
 	applyV3Base applierV3
 	applyWait   wait.WaitTime
 
+	// chaincodeBase is the core applier without auth or quotas
+	chaincodeBase applierCC
+
 	kv         mvcc.ConsistentWatchableKV
 	lessor     lease.Lessor
 	bemu       sync.Mutex
@@ -592,6 +595,7 @@ func NewServer(cfg ServerConfig) (srv *EtcdServer, err error) {
 	}
 
 	srv.applyV3Base = srv.newApplierV3Backend()
+	srv.chaincodeBase = srv.newApplierCCbackend()
 	if err = srv.restoreAlarms(); err != nil {
 		return nil, err
 	}

@@ -20,6 +20,8 @@ import (
 	"encoding/binary"
 	"time"
 
+	"github.com/yudai/pp"
+
 	"go.etcd.io/etcd/auth"
 	"go.etcd.io/etcd/etcdserver/api/membership"
 	pb "go.etcd.io/etcd/etcdserver/etcdserverpb"
@@ -117,8 +119,9 @@ func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeRe
 	chk := func(ai *auth.AuthInfo) error {
 		return s.authStore.IsRangePermitted(ai, r.Key, r.RangeEnd)
 	}
+	pp.Println("どんな店員")
 
-	get := func() { resp, err = s.applyV3Base.Range(ctx, nil, r) }
+	get := func() { resp, err = s.chaincodeBase.Range(ctx, nil, r) }
 	if serr := s.doSerialize(ctx, chk, get); serr != nil {
 		err = serr
 		return nil, err
@@ -129,6 +132,7 @@ func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeRe
 func (s *EtcdServer) Put(ctx context.Context, r *pb.PutRequest) (*pb.PutResponse, error) {
 	ctx = context.WithValue(ctx, traceutil.StartTimeKey, time.Now())
 	resp, err := s.raftRequest(ctx, pb.InternalRaftRequest{Put: r})
+	pp.Println(resp)
 	if err != nil {
 		return nil, err
 	}
