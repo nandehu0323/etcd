@@ -18,8 +18,6 @@ package v3rpc
 import (
 	"context"
 
-	"github.com/yudai/pp"
-
 	"go.etcd.io/etcd/etcdserver"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	pb "go.etcd.io/etcd/etcdserver/etcdserverpb"
@@ -50,7 +48,7 @@ func (s *kvServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResp
 	if err := checkRangeRequest(r); err != nil {
 		return nil, err
 	}
-	pp.Println(r)
+	//pp.Println(r)
 	resp, err := s.kv.Range(ctx, r)
 	if err != nil {
 		return nil, togRPCError(err)

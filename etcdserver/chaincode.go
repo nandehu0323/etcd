@@ -16,12 +16,12 @@ package etcdserver
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"log"
 	"sort"
 	"time"
 
-	"github.com/yudai/pp"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/errors/retry"
 
 	pb "go.etcd.io/etcd/etcdserver/etcdserverpb"
 	"go.etcd.io/etcd/lease"
@@ -43,6 +43,7 @@ const (
 	orgAdmin       = "Admin"
 	ordererOrgName = "OrdererOrg"
 	configPath     = "./configs/config.yaml"
+	ccID           = "etcd"
 )
 
 // applierCC is the interface for processing chaincode raft messages
@@ -63,6 +64,11 @@ type applierCCbackend struct {
 	checkRange checkReqFunc
 }
 
+type chainCodeResponse struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 func (s *EtcdServer) newApplierCCbackend() applierCC {
 	base := &applierCCbackend{s: s}
 	base.checkPut = func(rv mvcc.ReadView, req *pb.RequestOp) error {
@@ -75,7 +81,7 @@ func (s *EtcdServer) newApplierCCbackend() applierCC {
 	if err != nil {
 		log.Fatal("Failed to create new SDK", err)
 	}
-	defer sdk.Close()
+	//defer sdk.Close()
 	//prepare channel client context using client context
 	clientChannelContext := sdk.ChannelContext(channelID, fabsdk.WithUser("User1"), fabsdk.WithOrg(orgName))
 	// Channel client is used to query and execute transactions (Org1 is default org)
@@ -157,7 +163,7 @@ func (a *applierCCbackend) Put(txn mvcc.TxnWrite, p *pb.PutRequest) (resp *pb.Pu
 		}
 	}
 
-	fmt.Printf("Key: %s, Val: %s, ID: %s\n", p.Key, val, leaseID)
+	//fmt.Printf("Key: %s, Val: %s, ID: %s\n", p.Key, val, leaseID)
 	resp.Header.Revision = txn.Put(p.Key, val, leaseID)
 	trace.AddField(traceutil.Field{Key: "response_revision", Value: resp.Header.Revision})
 	return resp, trace, nil
@@ -213,19 +219,32 @@ func (a *applierCCbackend) Range(ctx context.Context, txn mvcc.TxnRead, r *pb.Ra
 		limit = limit + 1
 	}
 
-	ro := mvcc.RangeOptions{
-		Limit: limit,
-		Rev:   r.Revision,
-		Count: r.CountOnly,
-	}
-
-	fmt.Printf("Key: %s End: %s\n", string(r.Key), string(r.RangeEnd))
-
-	rr, err := txn.Range(r.Key, mkGteRange(r.RangeEnd), ro)
+	response, err := a.cc.Query(channel.Request{ChaincodeID: ccID, Fcn: "List", Args: [][]byte{r.Key, mkGteRange(r.RangeEnd)}},
+		channel.WithRetry(retry.DefaultChannelOpts),
+		channel.WithTargetEndpoints("peer0.org1.example.com"),
+	)
 	if err != nil {
-		return nil, err
+		log.Fatal("Failed to query funds\n", err)
 	}
-	pp.Println(rr)
+
+	var res []chainCodeResponse
+	if err := json.Unmarshal(response.Payload, &res); err != nil {
+		log.Fatal(err)
+	}
+
+	kvs := make([]mvccpb.KeyValue, len(res))
+	for i, v := range res {
+		kvs[i] = mvccpb.KeyValue{
+			Key:   []byte(v.Key),
+			Value: []byte(v.Value),
+		}
+	}
+
+	rr := &mvcc.RangeResult{
+		KVs:   kvs,
+		Rev:   r.Revision + 1,
+		Count: len(kvs),
+	}
 
 	if r.MaxModRevision != 0 {
 		f := func(kv *mvccpb.KeyValue) bool { return kv.ModRevision > r.MaxModRevision }
