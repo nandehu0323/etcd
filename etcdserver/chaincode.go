@@ -244,8 +244,7 @@ func (a *applierCCbackend) Range(ctx context.Context, txn mvcc.TxnRead, r *pb.Ra
 		// fetch one extra for 'more' flag
 		limit = limit + 1
 	}
-
-	response, err := a.cc.Query(channel.Request{ChaincodeID: ccID, Fcn: "List", Args: [][]byte{r.Key, mkGteRange(r.RangeEnd)}},
+	response, err := a.cc.Query(channel.Request{ChaincodeID: ccID, Fcn: "List", Args: [][]byte{mkGteRange(r.Key), mkGteRange(r.RangeEnd)}},
 		channel.WithRetry(retry.DefaultChannelOpts),
 		channel.WithTargetEndpoints("peer0.org1.example.com"),
 	)
