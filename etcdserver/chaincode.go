@@ -51,6 +51,7 @@ type applierCC interface {
 	Apply(r *pb.InternalRaftRequest) *applyResult
 
 	Put(txn mvcc.TxnWrite, p *pb.PutRequest) (*pb.PutResponse, *traceutil.Trace, error)
+	PutCC(p *pb.PutRequest) (*pb.PutResponse, error)
 	Range(ctx context.Context, txn mvcc.TxnRead, r *pb.RangeRequest) (*pb.RangeResponse, error)
 	DeleteRange(txn mvcc.TxnWrite, dr *pb.DeleteRangeRequest) (*pb.DeleteRangeResponse, error)
 	Txn(rt *pb.TxnRequest) (*pb.TxnResponse, error)
@@ -167,6 +168,31 @@ func (a *applierCCbackend) Put(txn mvcc.TxnWrite, p *pb.PutRequest) (resp *pb.Pu
 	resp.Header.Revision = txn.Put(p.Key, val, leaseID)
 	trace.AddField(traceutil.Field{Key: "response_revision", Value: resp.Header.Revision})
 	return resp, trace, nil
+}
+
+func (a *applierCCbackend) PutCC(p *pb.PutRequest) (resp *pb.PutResponse, err error) {
+	resp = &pb.PutResponse{}
+	resp.Header = &pb.ResponseHeader{}
+	trace := traceutil.New("put",
+		a.s.getLogger(),
+		traceutil.Field{Key: "key", Value: string(p.Key)},
+		traceutil.Field{Key: "req_size", Value: proto.Size(p)},
+	)
+	val, leaseID := p.Value, lease.LeaseID(p.Lease)
+	if leaseID != lease.NoLease {
+		if l := a.s.lessor.Lookup(leaseID); l == nil {
+			return &pb.PutResponse{}, lease.ErrLeaseNotFound
+		}
+	}
+	_, err = a.cc.Execute(channel.Request{ChaincodeID: ccID, Fcn: "Put", Args: [][]byte{p.Key, val}},
+		channel.WithRetry(retry.DefaultChannelOpts),
+		channel.WithTargetEndpoints("peer0.org1.example.com"),
+	)
+	if err != nil {
+		return &pb.PutResponse{}, err
+	}
+	trace.AddField(traceutil.Field{Key: "response_revision", Value: resp.Header.Revision})
+	return resp, nil
 }
 
 func (a *applierCCbackend) DeleteRange(txn mvcc.TxnWrite, dr *pb.DeleteRangeRequest) (*pb.DeleteRangeResponse, error) {

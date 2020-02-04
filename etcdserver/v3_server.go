@@ -129,12 +129,14 @@ func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeRe
 
 func (s *EtcdServer) Put(ctx context.Context, r *pb.PutRequest) (*pb.PutResponse, error) {
 	ctx = context.WithValue(ctx, traceutil.StartTimeKey, time.Now())
-	resp, err := s.raftRequest(ctx, pb.InternalRaftRequest{Put: r})
+	resp, err := s.chaincodeBase.PutCC(r)
+	//resp, err := s.raftRequest(ctx, pb.InternalRaftRequest{Put: r})
 	//pp.Println(resp)
 	if err != nil {
 		return nil, err
 	}
-	return resp.(*pb.PutResponse), nil
+	//return resp.(*pb.PutResponse), nil
+	return resp, nil
 }
 
 func (s *EtcdServer) DeleteRange(ctx context.Context, r *pb.DeleteRangeRequest) (*pb.DeleteRangeResponse, error) {
@@ -575,6 +577,7 @@ func (s *EtcdServer) raftRequestOnce(ctx context.Context, r pb.InternalRaftReque
 		result.trace.InsertStep(0, applyStart, "process raft request")
 		result.trace.LogIfLong(traceThreshold)
 	}
+	//pp.Println(result.resp)
 	return result.resp, nil
 }
 
@@ -640,13 +643,17 @@ func (s *EtcdServer) processInternalRaftRequestOnce(ctx context.Context, r pb.In
 	if id == 0 {
 		id = r.Header.ID
 	}
-	ch := s.w.Register(id)
+	//ch := s.w.Register(id)
 
 	cctx, cancel := context.WithTimeout(ctx, s.Cfg.ReqTimeout())
 	defer cancel()
 
 	start := time.Now()
-	err = s.r.Propose(cctx, data)
+	//err = s.r.Propose(cctx, data)
+	resp, err := s.chaincodeBase.PutCC(&pb.PutRequest{
+		Key:   r.Put.Key,
+		Value: r.Put.Value,
+	})
 	if err != nil {
 		proposalsFailed.Inc()
 		s.w.Trigger(id, nil) // GC wait
@@ -656,14 +663,14 @@ func (s *EtcdServer) processInternalRaftRequestOnce(ctx context.Context, r pb.In
 	defer proposalsPending.Dec()
 
 	select {
-	case x := <-ch:
-		return x.(*applyResult), nil
 	case <-cctx.Done():
 		proposalsFailed.Inc()
 		s.w.Trigger(id, nil) // GC wait
 		return nil, s.parseProposeCtxErr(cctx.Err(), start)
 	case <-s.done:
 		return nil, ErrStopped
+	default:
+		return &applyResult{resp: resp}, nil
 	}
 }
 

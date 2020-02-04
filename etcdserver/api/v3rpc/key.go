@@ -48,7 +48,6 @@ func (s *kvServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResp
 	if err := checkRangeRequest(r); err != nil {
 		return nil, err
 	}
-	//pp.Println(r)
 	resp, err := s.kv.Range(ctx, r)
 	if err != nil {
 		return nil, togRPCError(err)
