@@ -17,6 +17,7 @@ package etcdserver
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"log"
 	"sort"
 	"time"
@@ -38,12 +39,12 @@ import (
 )
 
 const (
-	channelID      = "mychannel"
-	orgName        = "Org1"
-	orgAdmin       = "Admin"
-	ordererOrgName = "OrdererOrg"
-	configPath     = "./configs/config.yaml"
-	ccID           = "etcd"
+	channelID           = "mychannel"
+	orgName             = "Org1"
+	orgAdmin            = "Admin"
+	ordererOrgName      = "OrdererOrg"
+	defaultConfFilePath = "/usr/local/configs/config.yaml"
+	ccID                = "etcd"
 )
 
 // applierCC is the interface for processing chaincode raft messages
@@ -71,6 +72,9 @@ type chainCodeResponse struct {
 }
 
 func (s *EtcdServer) newApplierCCbackend() applierCC {
+	var confFilePath = flag.String("f", defaultConfFilePath, "path to configuration file")
+	flag.Parse()
+
 	base := &applierCCbackend{s: s}
 	base.checkPut = func(rv mvcc.ReadView, req *pb.RequestOp) error {
 		return base.checkRequestPut(rv, req)
@@ -78,7 +82,7 @@ func (s *EtcdServer) newApplierCCbackend() applierCC {
 	base.checkRange = func(rv mvcc.ReadView, req *pb.RequestOp) error {
 		return base.checkRequestRange(rv, req)
 	}
-	sdk, err := fabsdk.New(config.FromFile(configPath))
+	sdk, err := fabsdk.New(config.FromFile(*confFilePath))
 	if err != nil {
 		log.Fatal("Failed to create new SDK", err)
 	}
