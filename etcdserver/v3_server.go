@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"time"
 
 	"go.etcd.io/etcd/auth"
@@ -96,16 +97,16 @@ func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeRe
 
 	var resp *pb.RangeResponse
 	var err error
-	defer func(start time.Time) {
-		warnOfExpensiveReadOnlyRangeRequest(s.getLogger(), start, r, resp, err)
-		if resp != nil {
-			trace.AddField(
-				traceutil.Field{Key: "response_count", Value: len(resp.Kvs)},
-				traceutil.Field{Key: "response_revision", Value: resp.Header.Revision},
-			)
-		}
-		trace.LogIfLong(traceThreshold)
-	}(time.Now())
+	//defer func(start time.Time) {
+	//	warnOfExpensiveReadOnlyRangeRequest(s.getLogger(), start, r, resp, err)
+	//	if resp != nil {
+	//		trace.AddField(
+	//			traceutil.Field{Key: "response_count", Value: len(resp.Kvs)},
+	//			traceutil.Field{Key: "response_revision", Value: resp.Header.Revision},
+	//		)
+	//	}
+	//	trace.LogIfLong(traceThreshold)
+	//}(time.Now())
 
 	if !r.Serializable {
 		err = s.linearizableReadNotify(ctx)
@@ -117,12 +118,15 @@ func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeRe
 	chk := func(ai *auth.AuthInfo) error {
 		return s.authStore.IsRangePermitted(ai, r.Key, r.RangeEnd)
 	}
-	//pp.Println("どんな店員")
 
+	fmt.Printf("Key: %s RangeEnd: %s\n", string(r.Key), string(r.RangeEnd))
 	get := func() { resp, err = s.chaincodeBase.Range(ctx, nil, r) }
 	if serr := s.doSerialize(ctx, chk, get); serr != nil {
 		err = serr
 		return nil, err
+	}
+	for _, kv := range resp.Kvs {
+		fmt.Printf("Key: %s Value: %s\n", string(kv.Key), string(kv.Value))
 	}
 	return resp, err
 }
@@ -650,10 +654,40 @@ func (s *EtcdServer) processInternalRaftRequestOnce(ctx context.Context, r pb.In
 
 	start := time.Now()
 	//err = s.r.Propose(cctx, data)
-	resp, err := s.chaincodeBase.PutCC(&pb.PutRequest{
-		Key:   r.Put.Key,
-		Value: r.Put.Value,
-	})
+	//pp.Println(r)
+	var resp proto.Message
+	switch {
+	case r.Put != nil:
+		resp, err = s.chaincodeBase.PutCC(&pb.PutRequest{
+			Key:   r.Put.Key,
+			Value: r.Put.Value,
+		})
+	case r.Txn != nil:
+		for _, tx := range r.Txn.Success {
+			switch r := tx.Request.(type) {
+			case *pb.RequestOp_RequestDeleteRange:
+				_resp, err := s.chaincodeBase.DeleteRangeCC(r.RequestDeleteRange)
+				if err != nil {
+					return nil, err
+				}
+				resp = &pb.TxnResponse{
+					Header:    _resp.Header,
+					Succeeded: true,
+					Responses: nil,
+				}
+			case *pb.RequestOp_RequestPut:
+				_resp, err := s.chaincodeBase.PutCC(r.RequestPut)
+				if err != nil {
+					return nil, err
+				}
+				resp = &pb.TxnResponse{
+					Header:    _resp.Header,
+					Succeeded: true,
+					Responses: nil,
+				}
+			}
+		}
+	}
 	if err != nil {
 		proposalsFailed.Inc()
 		s.w.Trigger(id, nil) // GC wait

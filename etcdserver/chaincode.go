@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"sort"
 	"time"
@@ -55,6 +56,7 @@ type applierCC interface {
 	PutCC(p *pb.PutRequest) (*pb.PutResponse, error)
 	Range(ctx context.Context, txn mvcc.TxnRead, r *pb.RangeRequest) (*pb.RangeResponse, error)
 	DeleteRange(txn mvcc.TxnWrite, dr *pb.DeleteRangeRequest) (*pb.DeleteRangeResponse, error)
+	DeleteRangeCC(dr *pb.DeleteRangeRequest) (*pb.DeleteRangeResponse, error)
 	Txn(rt *pb.TxnRequest) (*pb.TxnResponse, error)
 	Compaction(compaction *pb.CompactionRequest) (*pb.CompactionResponse, <-chan struct{}, *traceutil.Trace, error)
 }
@@ -175,6 +177,7 @@ func (a *applierCCbackend) Put(txn mvcc.TxnWrite, p *pb.PutRequest) (resp *pb.Pu
 }
 
 func (a *applierCCbackend) PutCC(p *pb.PutRequest) (resp *pb.PutResponse, err error) {
+	//_start := time.Now()
 	resp = &pb.PutResponse{}
 	resp.Header = &pb.ResponseHeader{}
 	trace := traceutil.New("put",
@@ -188,10 +191,15 @@ func (a *applierCCbackend) PutCC(p *pb.PutRequest) (resp *pb.PutResponse, err er
 			return &pb.PutResponse{}, lease.ErrLeaseNotFound
 		}
 	}
+	//fmt.Printf("実行前 %f秒\n", (time.Now().Sub(_start)).Seconds())
+	fmt.Printf("Key: %s Value: %s\n", string(p.Key), string(val))
+	//go func() {
 	_, err = a.cc.Execute(channel.Request{ChaincodeID: ccID, Fcn: "Put", Args: [][]byte{p.Key, val}},
 		channel.WithRetry(retry.DefaultChannelOpts),
 		channel.WithTargetEndpoints("peer0.org1.example.com"),
 	)
+	//}()
+	//fmt.Printf("実行後 %f秒\n", (time.Now().Sub(_start)).Seconds())
 	if err != nil {
 		return &pb.PutResponse{}, err
 	}
@@ -223,6 +231,20 @@ func (a *applierCCbackend) DeleteRange(txn mvcc.TxnWrite, dr *pb.DeleteRangeRequ
 	}
 
 	resp.Deleted, resp.Header.Revision = txn.DeleteRange(dr.Key, end)
+	return resp, nil
+}
+
+func (a *applierCCbackend) DeleteRangeCC(dr *pb.DeleteRangeRequest) (*pb.DeleteRangeResponse, error) {
+	resp := &pb.DeleteRangeResponse{}
+	resp.Header = &pb.ResponseHeader{}
+
+	_, err := a.cc.Execute(channel.Request{ChaincodeID: ccID, Fcn: "Put", Args: [][]byte{dr.Key, []byte{}}},
+		channel.WithRetry(retry.DefaultChannelOpts),
+		channel.WithTargetEndpoints("peer0.org1.example.com"),
+	)
+	if err != nil {
+		return &pb.DeleteRangeResponse{}, err
+	}
 	return resp, nil
 }
 
