@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"time"
 
 	"go.etcd.io/etcd/auth"
@@ -118,10 +119,14 @@ func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeRe
 		return s.authStore.IsRangePermitted(ai, r.Key, r.RangeEnd)
 	}
 
+	fmt.Printf("Key: %s RangeEnd: %s\n", string(r.Key), string(r.RangeEnd))
 	get := func() { resp, err = s.applyV3Base.Range(ctx, nil, r) }
 	if serr := s.doSerialize(ctx, chk, get); serr != nil {
 		err = serr
 		return nil, err
+	}
+	for _, kv := range resp.Kvs {
+		fmt.Printf("Key: %s Value: 0x%x\n", string(kv.Key), kv.Value)
 	}
 	return resp, err
 }
