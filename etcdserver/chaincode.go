@@ -70,7 +70,7 @@ type applierCCbackend struct {
 
 type chainCodeResponse struct {
 	Key   string `json:"key"`
-	Value string `json:"value"`
+	Value []byte `json:"value"`
 }
 
 func (s *EtcdServer) newApplierCCbackend() applierCC {
@@ -110,7 +110,7 @@ func (a *applierCCbackend) Apply(r *pb.InternalRaftRequest) *applyResult {
 	case r.Range != nil:
 		ar.resp, ar.err = a.s.chaincodeBase.Range(context.TODO(), nil, r.Range)
 	case r.Put != nil:
-		ar.resp, ar.trace, ar.err = a.s.chaincodeBase.Put(nil, r.Put)
+		ar.resp, ar.err = a.s.chaincodeBase.PutCC(r.Put)
 	case r.DeleteRange != nil:
 		ar.resp, ar.err = a.s.chaincodeBase.DeleteRange(nil, r.DeleteRange)
 	case r.Txn != nil:
@@ -192,7 +192,7 @@ func (a *applierCCbackend) PutCC(p *pb.PutRequest) (resp *pb.PutResponse, err er
 		}
 	}
 	//fmt.Printf("実行前 %f秒\n", (time.Now().Sub(_start)).Seconds())
-	fmt.Printf("Key: %s Value: %s\n", string(p.Key), string(val))
+	fmt.Printf("[PutCC] Key: %s Value: 0x%x\n", string(p.Key), val)
 	//go func() {
 	_, err = a.cc.Execute(channel.Request{ChaincodeID: ccID, Fcn: "Put", Args: [][]byte{p.Key, val}},
 		channel.WithRetry(retry.DefaultChannelOpts),
@@ -287,8 +287,9 @@ func (a *applierCCbackend) Range(ctx context.Context, txn mvcc.TxnRead, r *pb.Ra
 	for i, v := range res {
 		kvs[i] = mvccpb.KeyValue{
 			Key:   []byte(v.Key),
-			Value: []byte(v.Value),
+			Value: v.Value,
 		}
+		fmt.Printf("[Range] Key: %s Value: %s\n", v.Key, v.Value)
 	}
 
 	rr := &mvcc.RangeResult{
@@ -419,7 +420,7 @@ func (a *applierCCbackend) applyTxn(txn mvcc.TxnWrite, rt *pb.TxnRequest, txnPat
 			}
 			respi.(*pb.ResponseOp_ResponseRange).ResponseRange = resp
 		case *pb.RequestOp_RequestPut:
-			resp, _, err := a.Put(txn, tv.RequestPut)
+			resp, err := a.PutCC(tv.RequestPut)
 			if err != nil {
 				if lg != nil {
 					lg.Panic("unexpected error during txn", zap.Error(err))

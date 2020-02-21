@@ -18,8 +18,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"time"
+
+	"github.com/yudai/pp"
 
 	"go.etcd.io/etcd/auth"
 	"go.etcd.io/etcd/etcdserver/api/membership"
@@ -119,15 +120,15 @@ func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeRe
 		return s.authStore.IsRangePermitted(ai, r.Key, r.RangeEnd)
 	}
 
-	fmt.Printf("Key: %s RangeEnd: %s\n", string(r.Key), string(r.RangeEnd))
+	//fmt.Printf("Key: %s RangeEnd: %s\n", string(r.Key), string(r.RangeEnd))
 	get := func() { resp, err = s.chaincodeBase.Range(ctx, nil, r) }
 	if serr := s.doSerialize(ctx, chk, get); serr != nil {
 		err = serr
 		return nil, err
 	}
-	for _, kv := range resp.Kvs {
-		fmt.Printf("Key: %s Value: %s\n", string(kv.Key), string(kv.Value))
-	}
+	//for _, kv := range resp.Kvs {
+	//	fmt.Printf("Key: %s Value: %s\n", string(kv.Key), string(kv.Value))
+	//}
 	return resp, err
 }
 
@@ -654,7 +655,7 @@ func (s *EtcdServer) processInternalRaftRequestOnce(ctx context.Context, r pb.In
 
 	start := time.Now()
 	//err = s.r.Propose(cctx, data)
-	//pp.Println(r)
+	pp.Println(r)
 	var resp proto.Message
 	switch {
 	case r.Put != nil:
